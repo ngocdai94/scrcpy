@@ -18,7 +18,7 @@ static void init_audio_spec(SDL_AudioSpec *spec) {
     spec->freq = 44100;
     spec->format = AUDIO_S16LSB;
     spec->channels = 2;
-    spec->samples = 1024;
+    spec->samples = 2048;
 }
 
 SDL_bool audio_player_init(struct audio_player *player, const char *serial) {
@@ -34,7 +34,12 @@ void audio_player_destroy(struct audio_player *player);
 
 static void audio_input_callback(void *userdata, Uint8 *stream, int len) {
     struct audio_player *player = userdata;
-    if (SDL_QueueAudio(player->output_device, stream, len)) {
+    if (!SDL_QueueAudio(player->output_device, stream, len)) {
+        if (SDL_AtomicCAS(&player->output_playing, 0, 1)) {
+            // this is the first input data, unpause the output
+            SDL_PauseAudioDevice(player->output_device, 0);
+        }
+    } else {
         LOGE("Cannot queue audio: %s", SDL_GetError());
     }
 }
@@ -79,20 +84,10 @@ SDL_bool audio_player_open(struct audio_player *player) {
         return SDL_FALSE;
     }
 
+    // initially, the output is paused
+    SDL_AtomicSet(&player->output_playing, 0);
+
     return SDL_TRUE;
-}
-
-static void audio_player_set_paused(struct audio_player *player, SDL_bool paused) {
-    SDL_PauseAudioDevice(player->input_device, paused);
-    SDL_PauseAudioDevice(player->output_device, paused);
-}
-
-void audio_player_play(struct audio_player *player) {
-    audio_player_set_paused(player, SDL_FALSE);
-}
-
-void audio_player_pause(struct audio_player *player) {
-    audio_player_set_paused(player, SDL_TRUE);
 }
 
 void audio_player_close(struct audio_player *player) {
@@ -142,7 +137,11 @@ SDL_bool audio_forwarding_start(struct audio_player *player, const char *serial)
         goto error_disable_audio_forwarding;
     }
 
-    audio_player_play(player);
+    // unpause the input
+    SDL_PauseAudioDevice(player->input_device, 0);
+
+    // the output will be unpaused on first input sample
+
     return SDL_TRUE;
 
 error_disable_audio_forwarding:

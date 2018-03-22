@@ -8,6 +8,7 @@ struct audio_player {
     const char *serial;
     SDL_AudioDeviceID input_device;
     SDL_AudioDeviceID output_device;
+    SDL_atomic_t output_playing;
 };
 
 SDL_bool sdl_audio_init(void);
@@ -18,9 +19,6 @@ void audio_player_destroy(struct audio_player *player);
 
 SDL_bool audio_player_open(struct audio_player *player);
 void audio_player_close(struct audio_player *player);
-
-void audio_player_play(struct audio_player *player);
-void audio_player_pause(struct audio_player *player);
 
 // for convenience, these functions handle everything
 SDL_bool audio_forwarding_start(struct audio_player *player, const char *serial);
